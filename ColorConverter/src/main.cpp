@@ -1,11 +1,16 @@
 #include "InitializeLibrary.h"
 #include "APDFLDoc.h"
 #include "CorCalls.h"
-#include "AcroColorCalls.h"
 #include "PagePDECntCalls.h"
 #include "PERCalls.h"
 #include "PEWCalls.h"
 #include "CosCalls.h"
+#include "AcroColorCalls.h"
+#include <sys/types.h>
+#include <string.h>
+#include <string>
+#include <unistd.h>
+#include <libgen.h>
 #include <stdio.h>
 
 using namespace std;
@@ -15,7 +20,18 @@ AC_Profile makeColorProfile(string profileName) {
   ASTFilePos ProfileSize;
   ASUns8 *ProfileBuffer;
   AC_Profile outputProfile;
-  string profilePath = "./Resources/Color/Profiles/" + profileName + ".icc";
+
+  size_t bufsize = PATH_MAX;
+  char* buf = (char*)malloc(bufsize);
+  int buflen = 0;
+  buflen = readlink("/proc/self/exe", buf, bufsize);
+
+  char execPath[buflen + 1];
+  memcpy(&execPath, buf, buflen);
+  execPath[bufsize] = '\0';
+  char* execFolder  = dirname(execPath);
+
+  string profilePath = string(execFolder) + "/Resources/Color/Profiles/" + profileName + ".icc";
   char *cprofilePath = (char *) profilePath.c_str();
 
   ASPathName Path = ASFileSysCreatePathFromCString(NULL, cprofilePath);
@@ -36,8 +52,8 @@ AC_Profile makeColorProfile(string profileName) {
 }
 
 PDColorConvertParamsEx makeColorConvertParams(AC_Profile profile) {
-  PDColorConvertParamsEx colorParams = (PDColorConvertParamsEx) malloc(sizeof(PDColorConvertParamsRecEx));
-  PDColorConvertActionEx colorConvertAction = (PDColorConvertActionEx) malloc(sizeof(PDColorConvertActionRecEx));
+  PDColorConvertParamsEx colorParams = (PDColorConvertParamsEx) calloc(1, sizeof(PDColorConvertParamsRecEx));
+  PDColorConvertActionEx colorConvertAction = (PDColorConvertActionEx) calloc(1, sizeof(PDColorConvertActionRecEx));
 
   colorConvertAction->mMatchAttributesAny = kColorConvObj_AnyObject;
   colorConvertAction->mMatchSpaceTypeAny = kColorConvRGBSpace;
@@ -71,16 +87,35 @@ int main(int argc, char **argv) {
     return libInit.getInitError();
   }
 
+  const string inputFilename = argv[1];
+  const string outputFilename = argv[2];
+
   DURING
 
+  printf("Creating profile...\n");
   AC_Profile profile = makeColorProfile("USWebCoatedSWOP");
+  printf("Profile created!\n");
+
+  printf("Creating color conversion params...\n");
   PDColorConvertParamsEx colorConvertParams = makeColorConvertParams(profile);
-  APDFLDoc *doc = new APDFLDoc(argv[1], true);
+  printf("Color conversion params created!\n");
+
+  printf("Creating doc from file: %s\n", inputFilename.c_str());
+  APDFLDoc *doc = new APDFLDoc(inputFilename.c_str(), true);
+  printf("Doc created!\n");
 
   printf("[INFO] Converting to CMYK - STARTING\n");
-  int i = 0;
+
+  printf("[INFO] doc has %lu pages\n", doc->numPages());
+  ASSize_t i = 0;
   while(i < doc->numPages()) {
-    ASBool failed = PDDocColorConvertPageEx(doc->getPDDoc(), colorConvertParams, i, NULL, NULL, 0, NULL, NULL);
+    printf("Converting page %lu\n", i);
+    ASBool changed;
+    PDDoc pdDoc = doc->getPDDoc();
+    printf("Have pdDoc; going to convert page to CMYK\n");
+    ASBool failed = PDDocColorConvertPageEx(pdDoc, colorConvertParams, i, NULL, NULL, 0, NULL, &changed);
+    printf("Page converted?\n");
+
 
     PDPage page = doc->getPage(i);
     releaseTempFiles(page);
@@ -96,7 +131,9 @@ int main(int argc, char **argv) {
   printf("[INFO] Converting to CMYK - DONE\n");
 
   // 3. Save the document
-  doc->saveDoc(argv[2]);
+  doc->saveDoc(outputFilename.c_str());
+
+
 
   HANDLER
 
