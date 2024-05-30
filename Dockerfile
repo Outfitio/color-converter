@@ -1,5 +1,4 @@
-FROM ubuntu:latest
-LABEL authors="bwilkins"
+FROM ubuntu:latest as build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -16,8 +15,13 @@ WORKDIR /color-converter
 
 RUN make clean && make
 
-COPY fixtures/SVG_Test_input.pdf .
+FROM ubuntu:latest
+LABEL authors="Brett Wilkins <brett.wilkins@smartsheet.com>"
 
-ENV LD_LIBRARY_PATH "/color-converter/ColorConverter/bin/Binaries/:/lib:/lib64:${LD_LIBRARY_PATH}"
 
-RUN ColorConverter/bin/ColorConverter SVG_Test_input.pdf SVG_Test_output.pdf
+COPY --from=build /color-converter/ColorConverter/bin /color-converter/bin
+WORKDIR /color-converter
+
+ENV LD_LIBRARY_PATH "/color-converter/bin/Binaries/:/lib:/lib64:${LD_LIBRARY_PATH}"
+
+ENTRYPOINT ["/color-converter/bin/ColorConverter"]

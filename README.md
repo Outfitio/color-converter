@@ -43,28 +43,20 @@ $ cd /path/to/color-converter
 $ docker buildx build --platform=linux/amd64 -t color-converter .
 ```
 
-The last instruction of the Dockerfile is to run the color conversion (as a part of the build) on the supplied SVG test fixture, and output it to `/color-converter/SVG_Test_output.pdf`.
-
-## Assessing the output
-
-To retrieve the file for inspection, you can download it using docker cp:
+To run the program in the container and get the output file out, run the following:
 
 ```shell
-$ docker cp $(docker create --name cc-container color-converter):/color-converter/SVG_Test_output.pdf . && \
-$ docker rm cc-container
+$ docker run -v $PWD/fixtures:/color-converter/fixtures -v $PWD/output:/color-converter/output color-converter fixtures/SVG_Test_input.pdf output/SVG_Test_output.pdf
 ```
 
-## Running the program manually
+The output will then be at the location `output/SVG_Test_output.pdf`.
 
-You can run an instance of the container and run bash within it, like so:
+### How does this image/container work?
 
-```shell
-$ docker run -it color-converter /bin/bash
-```
+The input file is being mounted into docker using a volume: `-v $PWD/fixtures:/color-converter/fixtures`, which makes it available in the working directory of the container. 
+Subsequently, the output directory is also mounted as a volume: `-v $PWD/output:/color-converter/output`, allowing us to access the output PDF once the conversion process is done.
 
-Then inside the container, you can run the command on the given input, and an output filename:
-
-```shell
-$ ColorConverter/bin/ColorConverter SVG_Test_output.pdf new-output-filename.pdf
-```
+The container image is setup with the entrypoint set to run the ColorConverter program, so we only need to provide our input filepath and output filepath to the container - these are
+the last two arguments to the `docker run` command, `fixtures/SVG_Test_input.pdf` and `output/SVG_Test_output.pdf`. You can change the input and output files as desired, as long as they
+are correctly made available to the docker container at runtime, as described in the previous paragraph.
 
